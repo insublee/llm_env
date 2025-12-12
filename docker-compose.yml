@@ -1,0 +1,56 @@
+services:
+  train:
+    build: ./train
+    container_name: llm_train
+    volumes:
+      - ./datasets:/workspace/datasets
+      - ./models:/workspace/models
+      - ./logs:/workspace/logs
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    command: ["python", "train.py"]
+
+  vllm:
+    build: ./vllm
+    container_name: llm_vllm
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/models
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    command: [
+      "vllm",
+      "serve",
+      "/models/my_model",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8000"
+    ]
+
+  api:
+    build: ./serve
+    container_name: llm_api
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./models:/models
+    depends_on:
+      - vllm
+    command: ["python", "app.py"]
+
+volumes:
+  datasets:
+  models:
+  logs:

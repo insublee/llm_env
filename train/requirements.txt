@@ -1,0 +1,5 @@
+torch --index-url https://download.pytorch.org/whl/cu121
+unsloth
+datasets
+transformers
+accelerate
