@@ -76,7 +76,7 @@ def main():
 
     print("🎉 Training done!")
 
-    trainer.save_model("/workspace/outputs/my_model")
+    trainer.save_model("/workspace/models/my_model")
 
 if __name__ == "__main__":
     main()
