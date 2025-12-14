@@ -1,0 +1,24 @@
+services:
+  llm_train:
+    build:
+      context: ./docker/train
+      dockerfile: Dockerfile
+    image: llm-train
+    container_name: llm_train
+    runtime: nvidia
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+    environment:
+      - HF_HOME=/workspace/.hf
+
+    volumes:
+      - ./models:/workspace/models
+      - ./outputs:/workspace/outputs
+      - /mnt/e/hf_cache:/workspace/.hf
+
+    command: python train.py

@@ -1,0 +1,22 @@
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
+
+RUN apt update && apt install -y \
+    python3 python3-pip python3-venv \
+    git wget gcc \
+ && apt clean \
+ && rm -rf /var/lib/apt/lists/*
+
+# WSL용 CUDA driver 링크 (있으면 쓰고 없으면 무시)
+RUN ln -s /usr/lib/wsl/lib/libcuda.so /usr/lib/libcuda.so || true
+
+WORKDIR /workspace
+
+# venv 생성
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements.txt /tmp/requirements.txt
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
+ && pip install -r /tmp/requirements.txt
