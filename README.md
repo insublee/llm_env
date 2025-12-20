@@ -1,166 +1,155 @@
-# LLM Training & Serving Environment (WSL + Docker + GPU)
+# 🧠 LLM Fine-tuning & vLLM Serving (Docker 기반)
 
-Windows + WSL2 환경에서
-**LLM 학습(Unsloth)과 서빙(vLLM)을 Docker로 분리** 운영하기 위한 개발 환경입니다.
+이 레포는 LoRA 기반 LLM 파인튜닝 → 병합 → vLLM 서빙까지를
+Docker + GPU 환경에서 한 번에 실행할 수 있도록 구성되어 있습니다.
 
-RTX 4090 기준으로 테스트되었으며,
-재현 가능한 환경 구성을 목표로 합니다.
+✅ GPU 1장 (예: RTX 4090)
+✅ Docker Desktop + WSL2
+✅ NVIDIA 드라이버 설치 완료
+이 3가지만 되어 있으면 됩니다.
 
-## 🧱 Architecture Overview
-``` scss
-Windows
- └─ WSL2 (Ubuntu)
-     └─ Docker Desktop (WSL backend, data on E:)
-         ├─ llm-train  (Unsloth + GPU fine-tuning)
-         ├─ llm-vllm   (vLLM inference server)
-         └─ llm-api    (FastAPI, optional)
+# 📁 프로젝트 구조
 ```
-
-**Training / Serving 완전 분리**
-
-Docker image rebuild 최소화
-
-대용량 캐시(HuggingFace, pip) → 외부 볼륨 마운트
-
-## 💻 Requirements
-### Hardware
-- NVIDIA GPU (tested: RTX 4090, 24GB VRAM)
-- SSD 권장 (Docker + HF cache)
-
-### Software
-- Windows 11
-- WSL2 (Ubuntu 22.04)
-- Docker Desktop (WSL backend)
-- NVIDIA GPU Driver (Windows)
-- NVIDIA Container Toolkit (Docker Desktop 포함)
-
-## 📁 Project Structure
-``` csharp
 llm_env/
-├─ docker/
-│  └─ train/
-│     ├─ Dockerfile.base   # heavy deps (torch, unsloth)
-│     ├─ Dockerfile        # lightweight training image
-│     └─ requirements.txt
-├─ docker-compose.train.yml
-├─ train.py
-├─ models/                 # trained models output
-└─ README.md
+├── docker/
+│   ├── train/
+│   │   ├── Dockerfile.base
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   ├── train.py
+│   │   └── merge_lora.py
+│   └── vllm/
+│       └── Dockerfile
+├── docker-compose.train.yml
+├── docker-compose.vllm.yml
+├── models/
+│   ├── lora/
+│   │   └── my_model/        # LoRA 학습 결과
+│   └── merged/
+│       └── my_model/        # LoRA 병합 완료 모델 (vLLM용)
+└── README.md
+```
+# 1️⃣ 사전 준비 (한 번만)
+## 1. Docker & GPU 확인
+```
+docker --version
+nvidia-smi
 ```
 
-## 🚀 Training (Unsloth)
-### 1️⃣ Build base image (1회만)
-``` bash
-cd docker/train
+Docker Desktop 설정:
+Settings → Resources → Advanced
+Docker data location을 **여유 있는 디스크 (예: E:)**로 설정 권장
 
-DOCKER_BUILDKIT=1 docker build \
-  -f Dockerfile.base \
-  -t llm-train-base .
+# 2️⃣ 학습 (LoRA Fine-tuning)
+## 2-1. 이전 컨테이너 / 볼륨 정리 (중요)
 ```
-
-⚠️ 이 단계는 오래 걸릴 수 있음 (torch, unsloth, triton)
-
----
-
-### 2️⃣ Run training container
-``` bash
-cd /mnt/e/llm/llm_env
-
+docker compose -f docker-compose.train.yml down -v
+rm -rf models/*
+```
+## 2-2. 학습 실행
+```
 docker compose -f docker-compose.train.yml up --build
 ```
-- GPU 자동 인식
-- HuggingFace cache 외부 마운트
-- 모델 출력: ```./models/```
 
----
-
-### 🧠 Training Details
-
-Model: unsloth/mistral-7b-v0.3
-Dataset: HuggingFaceH4/ultrachat_200k (train_sft[:1000])
-Precision: bf16
-Fine-tuning: LoRA (PEFT)
-Gradient checkpointing: unsloth
-
-### 핵심 설정 (train.py)
-``` python
-trainer = SFTTrainer(
-    model=model,
-    tokenizer=tokenizer,
-    train_dataset=ds,
-    max_seq_length=2048,
-    args=TrainingArguments(
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=4,
-        max_steps=100,
-        learning_rate=2e-4,
-        bf16=True,
-        gradient_checkpointing="unsloth",
-        output_dir="/models/my_model",
-        save_steps=50,
-        save_total_limit=2,
-        logging_steps=5,
-        report_to="none",
-    ),
-)
+정상적으로 돌면 마지막에 다음 로그가 보입니다:
+```
+🎉 Training done!
+llm_train exited with code 0
+```
+## 2-3. LoRA 결과 확인
+```
+ls models/lora/my_model
 ```
 
-## 📦 Volume & Cache Strategy
-### docker-compose.train.yml
-``` yaml
-volumes:
-  - ./models:/models
-  - /mnt/e/hf_cache:/root/.cache/huggingface
+아래 파일들이 있으면 정상입니다:
 
-environment:
-  - HF_HOME=/root/.cache/huggingface
+adapter_config.json
+adapter_model.safetensors
+tokenizer.json
+tokenizer.model
+
+# 3️⃣ LoRA → Base 모델 병합 (필수)
+
+vLLM은 LoRA 상태의 모델을 직접 서빙할 수 없습니다.
+반드시 merge가 필요합니다.
+
+## 3-1. 병합 실행
 ```
-- Docker rebuild 시에도 HF 모델 재다운로드 방지
-- SSD(E:) 사용 권장
-
-## 🧯 Known Pitfalls & Fixes
-❌ ```cannot find -lcuda```
-
-✔ 해결:
-nvidia/cuda:*runtime* ❌
-nvidia/cuda:*devel* ✅
-libcuda.so WSL symlink 필요
-``` dockerfile
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
-RUN ln -s /usr/lib/wsl/lib/libcuda.so /usr/lib/libcuda.so || true
+docker compose -f docker-compose.train.yml run --rm llm_train python merge_lora.py
 ```
+
+정상 로그:
+```
+🔗 Loading LoRA adapter...
+🧬 Merging LoRA into base model...
+💾 Saving merged model...
+🎉 Merge complete!
+```
+## 3-2. 병합 결과 확인
+```
+ls models/merged/my_model
+```
+
+아래 파일들이 있어야 합니다:
+```
+config.json
+model.safetensors (또는 shard 파일들)
+tokenizer.json
+tokenizer.model
+generation_config.json
+```
+
+❗ adapter_* 파일이 없어야 정상입니다.
+
+# 4️⃣ vLLM 서빙 실행
+## 4-1. vLLM 컨테이너 실행
+```
+docker compose -f docker-compose.vllm.yml up --build
+```
+
+정상 로그 예시:
+```
+vLLM API server version 0.12.0
+Listening on http://0.0.0.0:8000
+```
+
+## 4-2. API 테스트
+curl http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "my_model",
+    "prompt": "Explain LoRA fine-tuning in simple terms.",
+    "max_tokens": 200
+  }'
 ---
-❌ **Unsloth dependency conflict**
 
-✔ 해결:
-- torch, trl 버전 직접 고정하지 말 것
-- unsloth가 요구하는 버전에 맡기기
+# ⚠️ 자주 발생하는 문제
+## ❌ 모델이 저장되지 않는 경우
+
+TrainingArguments.output_dir 와
+
+trainer.save_model() 경로가 컨테이너 기준 경로인지 확인
+```
+output_dir="/models/lora/my_model"
+trainer.save_model("/models/lora/my_model")
+```
+## ❌ vLLM에서 /models/my_model 에러
+
+config.json 없는 디렉토리를 가리키고 있는 경우
+
+반드시 merged 모델 경로 사용
+
+command: vllm serve /models/merged/my_model
 ---
-❌ **Quantized model cannot be fine-tuned**
-
-✔ 해결:
-- LoRA adapters 반드시 활성화
-- pure 4bit 모델 단독 학습 ❌
----
-
-## ✅ Current Status
-
-- DONE WSL + Docker + GPU 정상 인식
-- DONE  Unsloth fine-tuning 성공
-- DONE 모델 저장 확인 (/models)
-- TODO vLLM 서빙 연결
-- TODO HuggingFace 자동 업로드
-- TODO FastAPI 인증 / 로그
-
-## 🔜 Next Steps
-
-1. vLLM 컨테이너에서 /models 로컬 모델 로딩
-2. OpenAI-compatible API 테스트
-3. HuggingFace Hub 자동 push
-4. 실사용용 config 분리 (dev / prod)
----
-
-**🧠 Notes**
-
-이 레포는 **“한 번 세팅하면 다시 안 깨지는 LLM 실험 환경”**을 목표로 합니다.
-Windows + GPU + Docker + LLM 조합에서 삽질을 줄이기 위한 기록입니다.
+# 🎯 전체 파이프라인 요약
+```
+train.py
+  ↓
+LoRA adapters 생성
+  ↓
+merge_lora.py
+  ↓
+순수 HF 모델 생성
+  ↓
+vLLM 서빙
+```
