@@ -1,0 +1,26 @@
+services:
+  llm_vllm:
+    build:
+      context: ./docker/vllm
+      dockerfile: Dockerfile
+    image: llm-vllm
+    container_name: llm_vllm
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./models:/models
+      - /mnt/e/hf_cache:/root/.cache/huggingface
+
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - MODEL_PATH=/models/my_model_merged
+
+    restart: unless-stopped

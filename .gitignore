@@ -1,3 +1,7 @@
+models/base/*
+models/lora/*
+models/merged/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

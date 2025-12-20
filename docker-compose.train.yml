@@ -17,7 +17,7 @@ services:
       - HF_HOME=/workspace/.hf
 
     volumes:
-      - ./models:/workspace/models
+      - /mnt/e/llm/llm_env/models:/models
       - ./outputs:/workspace/outputs
       - /mnt/e/hf_cache:/workspace/.hf
 

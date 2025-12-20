@@ -15,6 +15,8 @@ def format_chat(example):
     return {"text": text}
 
 def main():
+    OUTPUT_DIR = "/models/lora/my_model"
+
     print("🚀 Loading dataset...")
     ds = load_dataset(
         "HuggingFaceH4/ultrachat_200k",
@@ -58,13 +60,13 @@ def main():
         args=TrainingArguments(
             per_device_train_batch_size=4,
             gradient_accumulation_steps=4,
-            warmup_steps=10,
-            max_steps=100,
+            warmup_steps=1,
+            max_steps=10,
             learning_rate=2e-4,
             bf16=True,
             logging_steps=5,
-            output_dir="/models/my_model",
-            save_steps=50,
+            output_dir=OUTPUT_DIR,
+            save_steps=5,
             save_total_limit=2,
             report_to="none",
             
@@ -76,7 +78,13 @@ def main():
 
     print("🎉 Training done!")
 
-    trainer.save_model("/workspace/models/my_model")
+    print("💾 Saving LoRA adapter...")
+    trainer.save_model(OUTPUT_DIR)
+    model.save_pretrained(OUTPUT_DIR)
+    tokenizer.save_pretrained(OUTPUT_DIR)
+
+    print("✅ LoRA adapter saved to", OUTPUT_DIR)
+
 
 if __name__ == "__main__":
     main()
