@@ -1,9 +1,10 @@
 from fastapi import FastAPI
 import requests
+import os
 
 app = FastAPI()
 
-VLLM_URL = "http://vllm:8000/generate"
+VLLM_URL = os.getenv("VLLM_URL", "http://vllm:8000/generate")
 
 @app.get("/")
 def root():

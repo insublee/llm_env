@@ -14,43 +14,47 @@ def format_chat(example):
             text += f"<|assistant|>\n{content}\n"
     return {"text": text}
 
+import yaml
+import sys
+
 def main():
-    OUTPUT_DIR = "/models/lora/my_model"
+    # Load configuration
+    try:
+        with open("/workspace/configs/train.yaml", "r") as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        print("❌ Config file not found at /workspace/configs/train.yaml")
+        sys.exit(1)
+
+    OUTPUT_DIR = config["output"]["dir"]
 
     print("🚀 Loading dataset...")
     ds = load_dataset(
-        "HuggingFaceH4/ultrachat_200k",
-        split="train_sft[:1000]",
+        config["dataset"]["name"],
+        split=config["dataset"]["split"],
     )
     ds = ds.map(format_chat, remove_columns=ds.column_names)
 
     print("🚀 Loading model...")
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name="unsloth/mistral-7b-v0.3",
-        load_in_4bit=True,
+        model_name=config["model"]["name"],
+        load_in_4bit=config["model"]["load_in_4bit"],
     )
 
     print("🚀 Attaching LoRA adapters...")
     model = FastLanguageModel.get_peft_model(
         model,
-        r=16,
-        target_modules=[
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj",
-        ],
-        lora_alpha=16,
-        lora_dropout=0.0,
-        bias="none",
+        r=config["lora"]["r"],
+        target_modules=config["lora"]["target_modules"],
+        lora_alpha=config["lora"]["lora_alpha"],
+        lora_dropout=config["lora"]["lora_dropout"],
+        bias=config["lora"]["bias"],
         use_gradient_checkpointing=True,
-        random_state=42,
+        random_state=config["lora"]["random_state"],
     )
 
     print("🚀 Preparing trainer...")
+    training_args = config["training"]
     trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
@@ -58,18 +62,17 @@ def main():
         max_seq_length=2048,
         gradient_checkpointing = "unsloth",
         args=TrainingArguments(
-            per_device_train_batch_size=4,
-            gradient_accumulation_steps=4,
-            warmup_steps=1,
-            max_steps=10,
-            learning_rate=2e-4,
-            bf16=True,
-            logging_steps=5,
+            per_device_train_batch_size=training_args["per_device_train_batch_size"],
+            gradient_accumulation_steps=training_args["gradient_accumulation_steps"],
+            warmup_steps=training_args["warmup_steps"],
+            max_steps=training_args["max_steps"],
+            learning_rate=training_args["learning_rate"],
+            bf16=training_args["bf16"],
+            logging_steps=training_args["logging_steps"],
             output_dir=OUTPUT_DIR,
-            save_steps=5,
-            save_total_limit=2,
-            report_to="none",
-            
+            save_steps=training_args["save_steps"],
+            save_total_limit=training_args["save_total_limit"],
+            report_to=training_args["report_to"],
         ),
     )
 

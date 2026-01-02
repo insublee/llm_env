@@ -1,16 +1,17 @@
 services:
   train:
-    build: ./train
+    build: ./docker/train
     container_name: llm_train
     volumes:
-      - ./datasets:/workspace/datasets
-      - ./models:/workspace/models
-      - ./logs:/workspace/logs
+      - ${DATASETS_DIR}:/workspace/datasets
+      - ${MODELS_DIR}:/models
+      - ${LOGS_DIR}:/workspace/logs
+      - ./configs:/workspace/configs
+      - ./outputs:/workspace/outputs
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
-      - HF_HOME=/mnt/e/hf_cache
-      - TRANSFORMERS_CACHE=/mnt/e/hf_cache
-      - TORCH_HOME=/mnt/e/torch_cache
+      - HF_HOME=/workspace/.hf
+      - TRANSFORMERS_CACHE=/workspace/.hf
     deploy:
       resources:
         reservations:
@@ -19,12 +20,12 @@ services:
     command: ["python", "train.py"]
 
   vllm:
-    build: ./vllm
+    build: ./docker/vllm
     container_name: llm_vllm
     ports:
-      - "8000:8000"
+      - "${VLLM_PORT}:8000"
     volumes:
-      - ./models:/models
+      - ${MODELS_DIR}:/models
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
     deploy:
@@ -35,9 +36,9 @@ services:
     command: [
       "vllm",
       "serve",
-      "/models/my_model",
+      "/models/${MODEL_NAME}",
       "--host",
-      "0.0.0.0",
+      "${VLLM_HOST}",
       "--port",
       "8000"
     ]
@@ -46,14 +47,29 @@ services:
     build: ./serve
     container_name: llm_api
     ports:
-      - "9000:9000"
+      - "${API_PORT}:9000"
     volumes:
-      - ./models:/models
+      - ${MODELS_DIR}:/models
+    environment:
+      - VLLM_URL=http://vllm:8000/generate
     depends_on:
       - vllm
     command: ["python", "app.py"]
+
+  webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: llm_webui
+    ports:
+      - "${WEBUI_PORT}:8080"
+    environment:
+      - OPENAI_API_BASE_URL=http://vllm:8000/v1
+      - OPENAI_API_KEY=sk-local
+    depends_on:
+      - vllm
+    restart: unless-stopped
 
 volumes:
   datasets:
   models:
   logs:
+
