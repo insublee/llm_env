@@ -7,6 +7,16 @@ BASE_MODEL = "unsloth/mistral-7b-v0.3"
 LORA_PATH = "/models/lora/my_model"
 OUTPUT_PATH = "/models/merged/my_model"
 
+CHAT_TEMPLATE = """{% for message in messages %}
+{% if message['role'] == 'system' %}
+<s>[SYSTEM] {{ message['content'] }}</s>
+{% elif message['role'] == 'user' %}
+[INST] {{ message['content'] }} [/INST]
+{% elif message['role'] == 'assistant' %}
+{{ message['content'] }}
+{% endif %}
+{% endfor %}"""
+
 assert os.path.exists(f"{LORA_PATH}/adapter_config.json"), "❌ LoRA adapter not found"
 
 print("📦 Loading base model...")
@@ -26,6 +36,9 @@ model = PeftModel.from_pretrained(
 
 print("🧬 Merging LoRA into base model...")
 model = model.merge_and_unload()
+
+print("📝 Setting chat template...")
+tokenizer.chat_template = CHAT_TEMPLATE
 
 print("💾 Saving merged model...")
 model.save_pretrained(OUTPUT_PATH)
