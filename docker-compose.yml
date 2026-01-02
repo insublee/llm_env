@@ -56,6 +56,18 @@ services:
       - vllm
     command: ["python", "app.py"]
 
+  webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: llm_webui
+    ports:
+      - "${WEBUI_PORT}:8080"
+    environment:
+      - OPENAI_API_BASE_URL=http://vllm:8000/v1
+      - OPENAI_API_KEY=sk-local
+    depends_on:
+      - vllm
+    restart: unless-stopped
+
 volumes:
   datasets:
   models:
