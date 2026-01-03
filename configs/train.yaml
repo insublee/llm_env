@@ -1,6 +1,16 @@
 model:
-  name: "unsloth/mistral-7b-v0.3"
+  name: "Qwen/Qwen2.5-14B-Instruct"
   load_in_4bit: true
+  chat_template: |
+    {% for message in messages %}
+    {% if message['role'] == 'system' %}
+    <s>[SYSTEM] {{ message['content'] }}</s>
+    {% elif message['role'] == 'user' %}
+    [INST] {{ message['content'] }} [/INST]
+    {% elif message['role'] == 'assistant' %}
+    {{ message['content'] }}
+    {% endif %}
+    {% endfor %}
 
 dataset:
   name: "HuggingFaceH4/ultrachat_200k"
@@ -8,6 +18,7 @@ dataset:
 
 output:
   dir: "/models/lora/my_model"
+  merged_dir: "/models/merged/my_model"
 
 lora:
   r: 16

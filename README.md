@@ -57,6 +57,10 @@ curl http://localhost:9000/chat?q="Hello! Who are you?"
 model:
   name: "unsloth/mistral-7b-v0.3"
   load_in_4bit: true
+  chat_template: |
+    {% for message in messages %}
+    ...
+    {% endfor %}
 
 lora:
   r: 16

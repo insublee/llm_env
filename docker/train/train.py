@@ -28,14 +28,14 @@ def main():
 
     OUTPUT_DIR = config["output"]["dir"]
 
-    print("🚀 Loading dataset...")
+    print(f"🚀 Loading dataset...{config['dataset']['name']}")
     ds = load_dataset(
         config["dataset"]["name"],
         split=config["dataset"]["split"],
     )
     ds = ds.map(format_chat, remove_columns=ds.column_names)
 
-    print("🚀 Loading model...")
+    print(f"🚀 Loading model...{config['model']['name']}")
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=config["model"]["name"],
         load_in_4bit=config["model"]["load_in_4bit"],
